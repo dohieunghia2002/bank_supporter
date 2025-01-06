@@ -110,5 +110,18 @@ if uploaded_files:
 
                 st.write("Kết quả sau khi cập nhật:")
                 st.dataframe(template_dataframe, use_container_width=True)
+
+                # Tạo file Excel từ DataFrame kết quả
+                output_file = 'Ket_qua_ho_tro_Agribank.xlsx'
+                template_dataframe.to_excel(output_file, index=False)
+
+                # Thêm nút tải xuống file Excel
+                with open(output_file, "rb") as file:
+                    btn = st.download_button(
+                        label="Tải xuống kết quả",
+                        data=file,
+                        file_name=output_file,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
             else:
                 st.write("Cột 'Ma so truy xuat' không có trong file template.")
