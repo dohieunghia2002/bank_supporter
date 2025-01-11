@@ -43,6 +43,63 @@ def normalize_lookup_value(value):
         return str(value)
     return re.sub(r'\D', '', value)
 
+def calculate(template_df, brand_col_name):
+    access_col_name = template_df.filter(regex=r'(?i)ma\s*so').columns[0]
+    template_df[access_col_name] = template_df[access_col_name].fillna('')
+    print(template_df[access_col_name])
+    start_index = template_df[access_col_name].astype(str).str.match(r'^[+-]\s*\d+$').idxmax()
+
+    result = 0
+    for i in range(start_index, len(template_df)):
+        access_code = str(template_df.loc[i, access_col_name])
+        ket_qua_lp = template_df.loc[i, brand_col_name]
+        
+        if pd.notna(ket_qua_lp) and access_code.startswith(('+', '-')):
+            value = int(access_code.replace('+', '').replace('-', '').strip())
+            
+            # Cộng hoặc trừ tùy thuộc vào dấu
+            if access_code.startswith('+'):
+                result += ket_qua_lp
+            elif access_code.startswith('-'):
+                result -= ket_qua_lp
+    
+    last_index = len(template_df) - 1
+    if pd.notna(template_df.loc[last_index, brand_col_name]):
+        # Nếu có giá trị, thêm hàng mới
+        result_df = pd.DataFrame({brand_col_name: [result]})
+        template_df = pd.concat([template_df, result_df], ignore_index=True)
+    else:
+        # Nếu ô cuối cùng rỗng, cập nhật giá trị vào ô đó
+        template_df.loc[last_index, brand_col_name] = result
+
+    return template_df
+
+def update_sumtax_difference(template_df):
+    template_df.at[0, 'TONG THUE'] = int(template_df['Ket qua LP'].iloc[0] + template_df['Ket qua DN'].iloc[0])
+    print(template_df['TONG THUE'].iloc[0])
+
+    # Dò tìm ô có giá trị 'EV', 'ev', hoặc 'eV' trong cột 'TONG THUE'
+    ev_row = template_df[template_df['TONG THUE'].astype(str).str.lower() == 'ev']
+    if not ev_row.empty:
+        ev_index = ev_row.index[0]
+        ev_next_value = template_df.iloc[ev_index + 1, template_df.columns.get_loc('TONG THUE')]
+    else:
+        print("Không tìm thấy giá trị 'EV', 'ev', hoặc 'eV' trong cột 'TONG THUE'")
+        return template_df
+
+    # Dò tìm ô có giá trị 'CHENH LECH'
+    chenh_lech_row = template_df[template_df['TONG THUE'].astype(str).str.lower() == 'chenh lech']
+    if not chenh_lech_row.empty:
+        chenh_lech_index = chenh_lech_row.index[0]
+        # Cập nhật giá trị cho ô phía sau 'CHENH LECH'
+        new_value = int(template_df.at[0, 'TONG THUE'] - ev_next_value)
+        template_df.iloc[chenh_lech_index + 1, template_df.columns.get_loc('TONG THUE')] = new_value
+    else:
+        print("Không tìm thấy giá trị 'CHENH LECH' trong cột 'TONG THUE'")
+    
+    return template_df
+
+
 def find_and_update_results(template_df, row_index, LP_df, DN_df, access_code, cot_moc, data_lp_col, data_dn_col):
     """ 
     Hàm tìm kiếm và cập nhật kết quả dựa trên mã số truy xuất, cột mốc và cột dữ liệu cần lấy từ LP và DN.
@@ -108,6 +165,10 @@ if uploaded_files:
                             access_code = normalize_lookup_value(access_code)
                             template_dataframe = find_and_update_results(template_dataframe, row_index, LP_dataframe, DN_dataframe, float(access_code), cot_moc, data_lp_col, data_dn_col)
 
+                
+                template_dataframe = calculate(template_dataframe, 'Ket qua LP')
+                template_dataframe = calculate(template_dataframe, 'Ket qua DN')
+                template_dataframe = update_sumtax_difference(template_dataframe)
                 st.write("Kết quả sau khi cập nhật:")
                 st.dataframe(template_dataframe, use_container_width=True)
 
